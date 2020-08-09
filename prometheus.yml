@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: prom-config
+    labels:
+        app: prometheus
+        namespace: default
+data:
+    prometheus.yml: |
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+        scrape_configs:
+          - job_name: 'prometheus'
+            static_configs:
+            - targets: ['localhost:9090']
+          - job_name: 'apache'
+            static_configs:
+            - targets: ['104.211.161.190:9117']
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    name: prom-pvc
+    labels:
+        app: prometheus
+spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+        requests:
+            storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: prom-deploy
+    labels:
+        app: prometheus
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: prometheus
+    template:
+        metadata:
+            labels:
+                app: prometheus
+        spec:
+            volumes:
+            - name: prom-pvc
+              persistentVolumeClaim:
+                claimName: prom-pvc
+            - name: prom-config
+              configMap:
+                name: prom-config
+            containers:
+            - name: prom-pod
+              image: prom/prometheus
+              ports:
+              - containerPort: 9090
+              volumeMounts:
+              - name: prom-pvc
+                mountPath: /etc/prometheus
+              - name: prom-config
+                mountPath: /etc/prometheus/prometheus.yml
+                subPath: prometheus.yml
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: prom-svc
+    labels:
+        app: prometheus
+spec:
+    selector:
+        app: prometheus
+    type: LoadBalancer
+    ports:
+    - port: 9090
+      targetPort: 9090
